@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>THE WORLD RPG — Build Archive</title>
+
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+
+  <body>
+    <!-- 앱 최상단에 배치되는 고유 로딩 스크린 -->
+    <div id="appLoadingScreen" class="app-loading-screen">
+      <div class="loading-box">
+        <!-- 빙글빙글 도는 아크 서클 컴포넌트 -->
+        <div class="loading-spinner"></div>
+        <div class="loading-title">THE WORLD RPG</div>
+        <div class="loading-text">데이터베이스 동기화 중...</div>
+      </div>
+    </div>
+
+    <div class="background-orb orb-1"></div>
+    <div class="background-orb orb-2"></div>
+
+    <div class="app">
+      <!-- HEADER -->
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark">TW</div>
+
+          <div class="brand-text">
+            <a href="/" class="brand-anchor">
+              <strong>THE WORLD RPG</strong>
+              <span>BUILD ARCHIVE</span>
+            </a>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <div class="data-status">
+            <span class="status-dot"></span>
+            DATA CONNECTED
+          </div>
+
+          <button id="resetButton" class="reset-button" type="button">
+            전체 체크 초기화
+          </button>
+        </div>
+      </header>
+
+      <!-- BODY -->
+      <div class="layout">
+        <!-- SIDEBAR -->
+        <aside class="sidebar">
+          <div class="sidebar-title">
+            <span>CHARACTERS</span>
+            <strong id="classCount">0</strong>
+          </div>
+
+          <div class="search-box">
+            <span class="search-icon"> ⌕ </span>
+
+            <input
+              id="classSearch"
+              type="text"
+              placeholder="캐릭터 검색..."
+              autocomplete="off"
+            />
+          </div>
+
+          <div id="classList" class="class-list"></div>
+        </aside>
+
+        <!-- MAIN -->
+        <main class="content">
+          <!-- HERO -->
+          <section class="hero">
+            <div>
+              <div class="eyebrow">CHARACTER BUILD</div>
+
+              <h1 id="selectedClass">캐릭터를 선택해주세요</h1>
+
+              <p>장비를 클릭하면 제작 트리를 확인할 수 있습니다.</p>
+            </div>
+
+            <div class="hero-stat">
+              <span> CHECKED MATERIALS </span>
+
+              <strong id="totalChecked"> 0 </strong>
+            </div>
+          </section>
+
+          <!-- BUILD TOOLBAR -->
+          <section class="build-toolbar">
+            <div>
+              <span class="toolbar-label"> CURRENT BUILD </span>
+
+              <strong id="selectedBuildName"> - </strong>
+            </div>
+
+            <div class="build-counter">
+              BUILD
+              <strong id="buildNumber"> 0 </strong>
+            </div>
+          </section>
+
+          <!-- BUILDS -->
+          <section id="buildContainer" class="build-container"></section>
+        </main>
+      </div>
+    </div>
+
+    <!-- TOAST -->
+    <div id="toast" class="toast"></div>
+
+    <!-- 웹사이트 하단 푸터 (MIT 라이선스 저작권 표기 구역) -->
+    <footer class="app-footer">
+      <div class="footer-content">
+        <p class="copyright">
+          © 2026 TWRPG Build Archive. All Rights Reserved.
+        </p>
+        <div class="credits">
+          <span>Powered by open-source data & assets:</span>
+          <!-- sfarmani 저작권 링크 표기 -->
+          <a
+            href="https://github.com/sfarmani/twrpg-info"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="footer-link"
+            >twrpg-info</a
+          >
+          <span class="divider">|</span>
+          <a
+            href="https://github.com/sfarmani/twicons"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="footer-link"
+            >twicons</a
+          >
+          <span class="license-badge">MIT License</span>
+        </div>
+      </div>
+    </footer>
+
+    <script src="./script.js"></script>
+  </body>
+</html>
