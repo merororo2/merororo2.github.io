@@ -845,7 +845,7 @@ function createEquipmentWrapper(item, slot, buildIndex) {
 }
 
 /* =========================================================
-   상위 노드 실시간 제작 가능 상태 및 '충족' 문구 전파 검사 (이미지 소멸 버그 수정 버전)
+   상위 노드 실시간 제작 가능 상태 및 '충족' 문구 전파 검사 (고유 경로 완벽 지원 버전)
    ========================================================= */
 function updateUpperNodesStatus(equipmentKey) {
   const panel = document.querySelector(`.recipe-panel`);
@@ -854,31 +854,35 @@ function updateUpperNodesStatus(equipmentKey) {
   // 패널 안에 들어있는 모든 조합 아이템 트리 구조(.tree-root)를 수집
   const treeRoots = panel.querySelectorAll(".tree-root");
 
-  // 하위 조합 아이템의 완료 여부가 상위(부모)로 순차 전파될 수 있게 역순으로 탐색
+  // 하위 조합 아이템의 완료 여부가 상위(부모)로 순차 전파될 수 있게 역순(아래에서 위로) 탐색
   for (let i = treeRoots.length - 1; i >= 0; i--) {
     const rootEl = treeRoots[i];
 
-    // 현재 조합 박스(.tree-node) 요소를 선택 (.material이 아닌 것)
+    // 현재 단계를 대표하는 노드 (.material이 아닌 CRAFT나 FINAL 노드)
     const nodeEl = rootEl.querySelector(".tree-node:not(.material)");
     if (!nodeEl) continue;
 
-    // 현재 내 조합 단계 하위 자식 노드들 중 최하위 재료(.material) 버튼들만 골라냅니다.
-    const childMaterials = rootEl.querySelectorAll(".tree-node.material");
+    // 💡 [수정] 내 바로 아래에 있는 직계 자식 노드들만 수집합니다 (.tree-children 바로 밑의 자식들)
+    const childContainer = rootEl.querySelector(".tree-children");
+    if (!childContainer) continue;
 
-    // 💡 버그 해결 핵심: 상위 구조를 건드리지 않고 오직 글자 레이블 요소만 콕 집어 선택합니다.
+    // 직계 자식들 중 재료(.material) 버튼들과 중간 조합 노드(.tree-node)들을 모두 모읍니다.
+    const childNodes = childContainer.querySelectorAll(
+      ":scope > .tree-child > .tree-node.material, :scope > .tree-child > .tree-root > .tree-node",
+    );
     const quantitySpan = nodeEl.querySelector(".tree-node-quantity");
 
-    if (childMaterials.length > 0) {
-      // 내 하위 재료 버튼들이 전부 'checked' 클래스를 가지고 있는지 검사
-      const allChecked = Array.from(childMaterials).every((mat) =>
-        mat.classList.contains("checked"),
+    if (childNodes.length > 0) {
+      // 내 바로 밑의 자식들이 전부 체크되었거나(checked) 제작 가능한 상태(craftable)인지 검사
+      const allChecked = Array.from(childNodes).every(
+        (child) =>
+          child.classList.contains("checked") ||
+          child.classList.contains("craftable"),
       );
 
       if (allChecked) {
-        // 1) 모든 재료가 모여 충족되었을 때
         nodeEl.classList.add("craftable");
 
-        // 💡 오직 텍스트 속성만 변경하므로 좌측에 위치한 이미지(<img>) 구조는 안전하게 보존됩니다.
         if (quantitySpan) {
           quantitySpan.textContent = "충족";
           quantitySpan.style.color = "#6ee7b7"; // 에메랄드 그린 색상 강조
@@ -893,34 +897,30 @@ function updateUpperNodesStatus(equipmentKey) {
           );
         }
       } else {
-        // 2) 재료가 하나라도 모자라거나 체크가 해제되었을 때 원상 복구
         nodeEl.classList.remove("craftable");
 
         if (quantitySpan) {
-          // HTML에 심어둔 원본 수량 백업 텍스트를 읽어와 안전하게 글자만 원상 복구합니다.
           const backupText = quantitySpan.dataset.originalQuantity;
           quantitySpan.textContent = backupText ? backupText : "필요 1개";
           quantitySpan.style.color = "var(--yellow)"; // 원래의 노란색 복구
         }
 
-        // 제작 가능 안내 배지 제거
         const indicator = nodeEl.querySelector(".craft-ready-indicator");
         if (indicator) indicator.remove();
       }
     }
   }
 
-  // 3) 바깥 메인 장비 카드 텍스트 실시간 연동 처리
+  // 💡 [핵심] 바깥 메인 장비 카드의 텍스트와 클래스를 실시간으로 연동합니다.
   const currentWrapper = document.querySelector(`.equipment-wrapper.open`);
   if (currentWrapper) {
+    // 트리 내부의 가장 꼭대기에 있는 최종 노드(.tree-node.final)를 찾습니다.
     const finalNode = panel.querySelector(".tree-node.final");
     const isFinalCraftable = finalNode
       ? finalNode.classList.contains("craftable")
       : false;
 
     const card = currentWrapper.querySelector(".equipment-card");
-
-    // 💡 중요: .status-text 레이블 엘리먼트만 콕 찝어 글자를 교체하므로 이미지가 들어간 구조가 파괴되지 않습니다.
     const statusText = currentWrapper.querySelector(".status-text");
 
     if (isFinalCraftable) {
@@ -1001,6 +1001,7 @@ function createRecipePanel(item, equipmentKey) {
 
   return panel;
 }
+// 기존 renderCraftTree의 매개변수 구조를 활용하여 고유 경로를 HTML에 심어줍니다.
 function renderCraftTree(
   item,
   equipmentKey,
@@ -1011,17 +1012,23 @@ function renderCraftTree(
   if (!item) return "";
 
   const itemId = String(item.id || `unknown:${normalizeName(item.name || "")}`);
-  if (path.has(itemId)) return createMaterialNode(item, quantity, equipmentKey);
+
+  // 💡 [추가] 현재 노드까지의 고유 경로를 생성합니다 (예: "최종장비ID > 진용검ID > 오리하르콘ID")
+  const currentPathArray = Array.from(path).concat(itemId);
+  const itemPath = currentPathArray.join(">");
+
+  if (path.has(itemId))
+    return createMaterialNode(item, quantity, equipmentKey, itemPath);
 
   const nextPath = new Set(path);
   nextPath.add(itemId);
 
   if (isLeafMaterial(item))
-    return createMaterialNode(item, quantity, equipmentKey);
+    return createMaterialNode(item, quantity, equipmentKey, itemPath);
 
   const children = getRecipeChildren(item);
   if (children.length === 0)
-    return createMaterialNode(item, quantity, equipmentKey);
+    return createMaterialNode(item, quantity, equipmentKey, itemPath);
 
   const nodeClass = isRoot ? "tree-node final" : "tree-node intermediate";
   const childHtml = children
@@ -1034,42 +1041,23 @@ function renderCraftTree(
     )
     .join("");
 
-  const materialMap = collectLeafMaterials(item);
-  const materials = Array.from(materialMap.values());
-  const isAlreadyCraftable =
-    materials.length > 0 &&
-    materials.every((mat) => {
-      const matId = String(
-        mat.id || `unknown:${normalizeName(mat.name || "")}`,
-      );
-      return isMaterialChecked(equipmentKey, matId);
-    });
+  // (아래 이어서 고유 경로를 활용해 상태 검사하도록 수정)
+  const isAlreadyCraftable = false; // 상위 노드 체크 로직은 updateUpperNodesStatus에서 실시간 처리되므로 무관합니다.
 
-  const activeClass = isAlreadyCraftable ? `${nodeClass} craftable` : nodeClass;
-  const quantityText = isAlreadyCraftable
-    ? "충족"
-    : `필요 ${formatNumber(quantity)}개`;
-  const quantityStyle = isAlreadyCraftable
-    ? 'style="color: #6ee7b7;"'
-    : 'style="color: var(--yellow);"';
-  const readyIndicator = isAlreadyCraftable
-    ? '<span class="craft-ready-indicator">★ 제작 가능</span>'
-    : "";
+  const activeClass = nodeClass;
+  const quantityText = `필요 ${formatNumber(quantity)}개`;
+  const quantityStyle = 'style="color: var(--yellow);"';
 
-  // 💡 [핵심 수정] 아이템의 영문 이름을 소문자로 만들고 공백을 유지하거나 가공하여 이미지 경로 조립
-  // 파일 시스템 친화적으로 다듬기 위해 대문자를 소문자로 바꿉니다.
   const iconUrl = getItemImageUrl(item);
 
   return `
-    <div class="tree-root" data-item-id="${escapeAttribute(itemId)}">
+    <div class="tree-root" data-item-id="${escapeAttribute(itemId)}" data-item-path="${escapeAttribute(itemPath)}">
       <div class="${activeClass}">
         <div class="tree-node-top">
           <span class="tree-node-type">${isRoot ? "FINAL EQUIPMENT" : "CRAFT ITEM"}</span>
           <span class="tree-badge craft">${isRoot ? "EQUIPMENT" : "CRAFT"}</span>
-          ${readyIndicator}
         </div>
         
-        <!-- 로컬 JPG 이미지 고정 레이아웃 -->
         <div class="tree-node-content-wrapper">
           <img src="${iconUrl}" class="tree-node-icon" alt="${escapeAttribute(item.name)}" onerror="this.src='images/default.jpg'; this.style.opacity='0.5';" />
           <div class="tree-node-name">
@@ -1197,11 +1185,15 @@ function createUnknownItem(name) {
   };
 }
 
-function createMaterialNode(item, quantity, equipmentKey) {
+// 💡 4번째 인자로 itemPath를 받도록 수정합니다.
+function createMaterialNode(item, quantity, equipmentKey, itemPath = "") {
   const materialId = String(
     item.id || `unknown:${normalizeName(item.name || "")}`,
   );
-  const checked = isMaterialChecked(equipmentKey, materialId);
+
+  // 💡 [수정] 이제는 단순 materialId가 아니라 고유한 트리의 위치(itemPath)로 보유 체크를 수행합니다.
+  const checked = isMaterialChecked(equipmentKey, itemPath || materialId);
+
   const type = getMaterialType(item);
   let source = getMaterialSource(item);
   const badge = getMaterialBadge(item);
@@ -1225,18 +1217,15 @@ function createMaterialNode(item, quantity, equipmentKey) {
     ? 'style="color: #6ee7b7;"'
     : 'style="color: var(--yellow);"';
 
-  // 💡 [핵심 수정] 하위 재료도 똑같이 영문 이름을 기반으로 images/폴더 내의 jpg 파일을 호출합니다.
-  const englishName = String(item.name || "")
-    .trim()
-    .toLowerCase();
-  // 💡 로컬 경로(images/) 대신 깃허브 온라인 서버 경로로 대체합니다.
   const iconUrl = getItemImageUrl(item);
 
+  // 💡 data-item-path 속성을 HTML에 추가로 심어줍니다.
   return `
     <button
       type="button"
       class="tree-node material ${checked ? "checked" : ""}"
       data-material-id="${escapeAttribute(materialId)}"
+      data-item-path="${escapeAttribute(itemPath)}"
       data-equipment-key="${escapeAttribute(equipmentKey)}"
     >
       <div class="tree-node-top">
@@ -1244,7 +1233,6 @@ function createMaterialNode(item, quantity, equipmentKey) {
         <span class="tree-node-check">${checked ? "✓" : ""}</span>
       </div>
       
-      <!-- 로컬 JPG 이미지 고정 레이아웃 -->
       <div class="tree-node-content-wrapper">
         <img src="${iconUrl}" class="tree-node-icon" alt="${escapeAttribute(item.name)}" onerror="this.src='images/default.jpg'; this.style.opacity='0.5';" />
         <div class="tree-node-name">
@@ -1262,6 +1250,7 @@ function createMaterialNode(item, quantity, equipmentKey) {
     </button>
   `;
 }
+
 /* =========================================================
    ITEM DISPLAY NAME
    ========================================================= */
@@ -1456,45 +1445,43 @@ function getMaterialSource(item) {
 }
 
 /* =========================================================
-   EQUIPMENT CRAFTABLE
+   EQUIPMENT CRAFTABLE (초기 로드 및 빌드 검사용 수정 버전)
    ========================================================= */
-
 function isEquipmentCraftable(item, equipmentKey) {
-  /*
-    중요:
-    collectLeafMaterials()는 Map을 반환한다.
+  // 트리를 탐색하며 모든 최하위 재료들의 고유 경로(itemPath)를 수집하는 헬퍼 함수
+  function getLeafPaths(currentItem, currentPath = []) {
+    if (!currentItem) return [];
 
-    기존 코드:
-      materials.every(...)
+    const itemId = String(
+      currentItem.id || `unknown:${normalizeName(currentItem.name || "")}`,
+    );
+    const nextPath = currentPath.concat(itemId);
 
-    는 Map에서 사용할 수 없어서
-    materials.every is not a function 오류가 발생했음.
+    if (isLeafMaterial(currentItem)) {
+      return [nextPath.join(">")];
+    }
 
-    여기서 Map -> Array로 변환한다.
-  */
+    const children = getRecipeChildren(currentItem);
+    if (children.length === 0) {
+      return [nextPath.join(">")];
+    }
 
-  const materialMap = collectLeafMaterials(item);
+    let paths = [];
+    children.forEach((child) => {
+      paths = paths.concat(getLeafPaths(child.item, nextPath));
+    });
+    return paths;
+  }
 
-  const materials = Array.from(materialMap.values());
+  const leafPaths = getLeafPaths(item);
 
-  /*
-    재료가 없으면 제작 가능
-  */
-
-  if (materials.length === 0) {
+  if (leafPaths.length === 0) {
     return true;
   }
 
-  /*
-    모든 최종 재료가 체크되어 있어야 제작 가능
-  */
-
-  return materials.every((material) => {
-    const materialId = String(
-      material.id || `unknown:${normalizeName(material.name || "")}`,
-    );
-
-    return isMaterialChecked(equipmentKey, materialId);
+  // 모든 고유 경로의 재료들이 스토리지에 체크되어 있는지 검사합니다.
+  return leafPaths.every((path) => {
+    return Boolean(equipmentChecks[equipmentKey]?.[path]);
   });
 }
 
@@ -1642,7 +1629,7 @@ function isMaterialChecked(equipmentKey, materialId) {
 /* =========================================================
    TOGGLE MATERIAL (화면 지우고 다시 그리기 버그 완전 제어 버전)
    ========================================================= */
-function toggleMaterial(equipmentKey, materialId) {
+function toggleMaterial(equipmentKey, materialId, clickedElement) {
   if (!equipmentChecks[equipmentKey]) {
     equipmentChecks[equipmentKey] = {};
   }
@@ -1654,10 +1641,13 @@ function toggleMaterial(equipmentKey, materialId) {
   saveCheckedState();
   updateTotalChecked();
 
-  // 💡 [해결 핵심] 만약 이 함수 하단에 기존 원본 코드의 renderBuilds()가 남아있었다면
-  // 화면이 실시간으로 갱신되면서 이미지를 깨버립니다.
-  // 아래와 같이 순수하게 클래스 마크 처리 및 상위 트리 텍스트 동기화만 작동하게 가둡니다.
-  const materialButtons = document.querySelectorAll(
+  // 💡 [수정] 전체 문서(document)가 아닌, 현재 활성화된 장비 패널 내부에서만 같은 재료들을 찾아냅니다.
+  const activePanel = clickedElement
+    ? clickedElement.closest(".recipe-panel")
+    : null;
+  const targetScope = activePanel ? activePanel : document;
+
+  const materialButtons = targetScope.querySelectorAll(
     `.tree-node.material[data-equipment-key="${equipmentKey}"][data-material-id="${materialId}"]`,
   );
 
@@ -1669,7 +1659,7 @@ function toggleMaterial(equipmentKey, materialId) {
     }
   });
 
-  // 상위 아이템 노드 '충족' 문구 및 바깥 카드 동기화 점검 (이미지 무손실 기법)
+  // 상위 아이템 노드 '충족' 문구 및 바깥 카드 동기화 점검
   updateUpperNodesStatus(equipmentKey);
 
   showToast(
@@ -1825,35 +1815,59 @@ toggleEquipmentPanel = function (equipmentKey) {
     }
   }, 50);
 };
-/* =========================================================
-   CLICK (중복 클릭 및 이미지 버블링 버그 원천 차단 버전)
-   ========================================================= */
 function handleDocumentClick(event) {
-  // 1. 클릭된 요소나 그 상위 요소 중 재료 버튼(.tree-node.material)이 있는지 확인
   const material = event.target.closest(".tree-node.material");
   if (!material) return;
 
-  // 💡 [버그 방어 핵심] 사용자가 버튼 속 '이미지(<img>)'나 '글자'를 정확히 조준해서 클릭했을 때,
-  // 이벤트가 상위로 퍼지면서 중복 실행되거나 돔 구조가 깨지는 현상을 물리적으로 방지합니다.
   event.preventDefault();
   event.stopPropagation();
 
   const equipmentKey = material.dataset.equipmentKey;
   const materialId = material.dataset.materialId;
+  const itemPath = material.dataset.itemPath; // 💡 고유 경로 추출
 
   if (!equipmentKey || !materialId) return;
 
-  // 2. 이미 한 번 처리 중인 상태라면 중복 실행되지 않도록 임시 락(Lock)을 겁니다.
   if (material.dataset.loading === "true") return;
   material.dataset.loading = "true";
 
-  // 안전하게 보유 상태를 토글합니다.
-  toggleMaterial(equipmentKey, materialId);
+  // 💡 세 번째 인자로 itemPath를 함께 던집니다.
+  toggleMaterial(equipmentKey, itemPath || materialId, material);
 
-  // 실행이 완료된 후 락을 해제합니다.
   setTimeout(() => {
     material.dataset.loading = "false";
   }, 50);
+}
+
+function toggleMaterial(equipmentKey, storageKey, clickedElement) {
+  if (!equipmentChecks[equipmentKey]) {
+    equipmentChecks[equipmentKey] = {};
+  }
+
+  // 💡 이제 storageKey(고유 경로) 단위로 완전히 쪼개져 저장되므로 중복 체크가 불가능합니다.
+  const current = Boolean(equipmentChecks[equipmentKey][storageKey]);
+  equipmentChecks[equipmentKey][storageKey] = !current;
+
+  saveCheckedState();
+  updateTotalChecked();
+
+  // 오직 내가 클릭한 바로 그 '고유한 버튼' 하나만 UI 토글 처리합니다.
+  if (clickedElement) {
+    if (!current) {
+      clickedElement.classList.add("checked");
+    } else {
+      clickedElement.classList.remove("checked");
+    }
+  }
+
+  // 상위 조합 아이템 상태 실시간 갱신 작동
+  updateUpperNodesStatus(equipmentKey);
+
+  showToast(
+    !current
+      ? "재료를 보유 상태로 변경했습니다."
+      : "재료 보유 상태를 해제했습니다.",
+  );
 }
 
 /* =========================================================
